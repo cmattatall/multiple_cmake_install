@@ -90,7 +90,4 @@ done
 
 popd > /dev/null # leave TMP_BUILD_DIR
 
-# remove temporary build directory
-rm -r "${CMAKE_INSTALL_DIR_ABSOLUTE:?'CMAKE_INSTALL_DIR_ABSOLUTE not defined'}"/"${TMP_BUILD_DIR:?'TMP_BUILD_DIR not defined'}"
-
 popd > /dev/null # leave CMAKE_INSTALL_DIR_ABSOLUTE
