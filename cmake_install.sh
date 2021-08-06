@@ -57,7 +57,8 @@ for version in "${CMAKE_VERSIONS[@]}"; do
     if [ "$?" -ne 0 ]; then
     	echo "Attempting to download cmake version : ${version}..."
 	    CMAKE_TARBALL_URL="https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}.tar.gz"
-        if [ ! $(wget ${CMAKE_TARBALL_URL}) ]; then
+        wget "${CMAKE_TARBALL_URL}"
+        if [ "$?" -ne 0  ]; then
             echo "Could not download ${CMAKE_TARBALL_URL}"
         else	
             echo "Downloaded ${CMAKE_TARBALL_URL} sucessfully!"
