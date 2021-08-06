@@ -15,9 +15,35 @@
 #                                                                              #
 ################################################################################
 
+declare -a required_packages=("wget" "tar" "make" "gcc" "g++" "foobar")
+UPDATED=0
+for pkg in ${required_packages[@]}; do
+    echo -n "Checking for ${pkg} ..."
+    dpkg -s ${pkg} > /dev/null # check if installed
+    if [ "$?" -ne 0 ]; then
+        if [ -z $UPDATED ]; then
+            apt-get update
+            UPDATED=1
+        fi
+        apt-get install -y ${pkg}
+        if [ "$?" -ne 0 ] ; then
+            apt-cache search "${pkg}" | grep "${pkg}"
+            if [ "$?" -ne 0 ]; then
+                echo "Could not install package ${pkg} because apt says it does not exist."
+                exit 0
+            else 
+                echo "" # formatting
+                echo "Could not install ${pkg} using the package manager. Please try installing it manually"
+                exit 0
+            fi
+        fi
+    else
+        echo -n " ok "
+        echo "" # formatting
+    fi
+done
+
 set -e
-
-
 
 # Put the versions you want to install here
 declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3" "3.20.5")
