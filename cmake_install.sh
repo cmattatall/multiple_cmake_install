@@ -17,10 +17,10 @@
 set -e
 
 # clean up old cmake alternatives
-rm /etc/alternatives/cmake
-rm /etc/alternatives/ctest
-rm /etc/alternatives/cpack
-rm -r /var/lib/dpkg/alternatives/cmake
+#rm /etc/alternatives/cmake
+#rm /etc/alternatives/ctest
+#rm /etc/alternatives/cpack
+#rm -r /var/lib/dpkg/alternatives/cmake
 
 declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3")
 
@@ -31,24 +31,26 @@ if [ -d "${CMAKE_INSTALL_DIR_ABSOLUTE}" ]; then
 else
 	mkdir -p ${CMAKE_INSTALL_DIR_ABSOLUTE} 
 fi
-pushd ${CMAKE_INSTALL_DIR_ABSOLUTE}
+pushd ${CMAKE_INSTALL_DIR_ABSOLUTE} > /dev/null
 
 
 TMP_BUILD_DIR="build"
-if [ -d "${TMP_BUILD_DIR}"]; then
+if [ -d "${TMP_BUILD_DIR}" ]; then
     rm -r ${TMP_BUILD_DIR} && mkdir "${TMP_BUILD_DIR}"
 else 
     mkdir "${TMP_BUILD_DIR}"
 fi
-pushd ${TMP_BUILD_DIR}
+pushd ${TMP_BUILD_DIR} > /dev/null
 
 for version in "${CMAKE_VERSIONS[@]}"; do
-    wget "https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}.tar.gz"
-    tar -xvf cmake-${version}.tar.gz
-    rm cmake-${version}.tar.gz
+    update-alternatives --list cmake | grep ${version} > /dev/null
+    if [ "$?" -ne 0 ]; then
+	wget "https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}.tar.gz"
+    	tar -xvf cmake-${version}.tar.gz
+	rm cmake-${version}.tar.gz
 
-    # cmake-${version} will already exist from untarring the archive
-    pushd cmake-${version}
+	# cmake-${version} will already exist from untarring the archive
+    	pushd cmake-${version} > /dev/null
         CURRENT_CMAKE_VERSION_INSTALL_DIR="${CMAKE_INSTALL_DIR_ABSOLUTE}/cmake-${version}"
         if [ -d "${CURRENT_CMAKE_VERSION_INSTALL_DIR}" ]; then
             echo ""
@@ -63,12 +65,16 @@ for version in "${CMAKE_VERSIONS[@]}"; do
         --install /usr/bin/cmake cmake "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cmake ${ALT_PRIO} \
         --slave   /usr/bin/ctest ctest "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/ctest \
         --slave   /usr/bin/cpack cpack "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cpack
-    popd
+        
+	popd > /dev/null
+    else 
+	echo "cmake ${version} is already registered as an alternative"
+    fi
 done
 
-popd # leave TMP_BUILD_DIR
+popd > /dev/null # leave TMP_BUILD_DIR
 
 # remove temporary build directory
 rm -r "${CMAKE_INSTALL_DIR_ABSOLUTE}"/"${TMP_BUILD_DIR}"
 
-popd # leave CMAKE_INSTALL_DIR_ABSOLUTE
+popd > /dev/null # leave CMAKE_INSTALL_DIR_ABSOLUTE
