@@ -15,7 +15,7 @@
 #                                                                              #
 ################################################################################
 
-declare -a required_packages=("wget" "tar" "make" "gcc" "g++" "foobar")
+declare -a required_packages=("wget" "tar" "make" "gcc" "g++")
 UPDATED=0
 for pkg in ${required_packages[@]}; do
     echo -n "Checking for ${pkg} ..."
@@ -27,7 +27,7 @@ for pkg in ${required_packages[@]}; do
         fi
         apt-get install -y ${pkg}
         if [ "$?" -ne 0 ] ; then
-            apt-cache search "${pkg}" | grep "${pkg}"
+                apt-cache search "${pkg}" | grep "${pkg}"
             if [ "$?" -ne 0 ]; then
                 echo "Could not install package ${pkg} because apt says it does not exist."
                 exit 0
