@@ -53,7 +53,7 @@ pushd ${TMP_BUILD_DIR} > /dev/null
 set +e
 for version in "${CMAKE_VERSIONS[@]}"; do
     echo "Attempting to install cmake version : ${version}..."
-    update-alternatives --list cmake | grep -q "${version}" > /dev/null
+    update-alternatives --list cmake > /dev/null && update-alternatives --list cmake | grep -q "${version}" > /dev/null
     if [ "$?" -ne 0 ]; then
     	echo "Attempting to download cmake version : ${version}..."
 	    CMAKE_TARBALL_URL="https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}.tar.gz"
