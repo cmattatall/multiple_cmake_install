@@ -1,28 +1,36 @@
 #!/bin/bash
 ################################################################################
-# bash script to install multiple versions of cmake and configure them
-# using update-alternatives
-#
-#
+#                                                                              #
+# bash script to build and install multiple versions of cmake,                 #
+# and configure them using update-alternatives                                 #
+#                                                                              #
+#                                                                              #
 ################################################################################
-#
-# Note: RUN AS SUDO
-#
+#                                                                              #
+# Note: RUN AS SUDO                                                            #
+#                                                                              #
 ################################################################################
-#
-# Tested on Ubuntu 18.04
-#
+#                                                                              #
+# Tested on Ubuntu 18.04                                                       #
+#                                                                              #
 ################################################################################
 
 set -e
 
-# clean up old cmake alternatives
-#rm /etc/alternatives/cmake
-#rm /etc/alternatives/ctest
-#rm /etc/alternatives/cpack
-#rm -r /var/lib/dpkg/alternatives/cmake
 
-declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3")
+
+# Put the versions you want to install here
+declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3" "3.20.5")
+
+
+# If there are broken link groups,
+# You may have to manually delete the old alternatives.
+# See below:
+#
+# rm /etc/alternatives/cmake
+# rm /etc/alternatives/ctest
+# rm /etc/alternatives/cpack
+# rm -r /var/lib/dpkg/alternatives/cmake
 
 CMAKE_INSTALL_DIR_ABSOLUTE="/usr/cmake"
 
@@ -42,39 +50,47 @@ else
 fi
 pushd ${TMP_BUILD_DIR} > /dev/null
 
+set +e
 for version in "${CMAKE_VERSIONS[@]}"; do
-    update-alternatives --list cmake | grep ${version} > /dev/null
+    echo "Attempting to install cmake version : ${version}..."
+    update-alternatives --list cmake | grep -q "${version}" > /dev/null
     if [ "$?" -ne 0 ]; then
-	wget "https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}.tar.gz"
-    	tar -xvf cmake-${version}.tar.gz
-	rm cmake-${version}.tar.gz
+    	echo "Attempting to download cmake version : ${version}..."
+	    CMAKE_TARBALL_URL="https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}.tar.gz"
+        if [ ! $(wget ${CMAKE_TARBALL_URL}) ]; then
+            echo "Could not download ${CMAKE_TARBALL_URL}"
+        else	
+            echo "Downloaded ${CMAKE_TARBALL_URL} sucessfully!"
+            tar -xvf cmake-"${version}".tar.gz
+            rm cmake-"${version}".tar.gz
 
-	# cmake-${version} will already exist from untarring the archive
-    	pushd cmake-${version} > /dev/null
-        CURRENT_CMAKE_VERSION_INSTALL_DIR="${CMAKE_INSTALL_DIR_ABSOLUTE}/cmake-${version}"
-        if [ -d "${CURRENT_CMAKE_VERSION_INSTALL_DIR}" ]; then
-            echo ""
-        else 
-            mkdir -p "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
+            # cmake-${version} will already exist from untarring the archive
+            pushd cmake-"${version}" > /dev/null
+            CURRENT_CMAKE_VERSION_INSTALL_DIR="${CMAKE_INSTALL_DIR_ABSOLUTE}/cmake-${version}"
+            if [ -d "${CURRENT_CMAKE_VERSION_INSTALL_DIR}" ]; then
+                echo ""
+            else 
+                mkdir -p "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
+            fi
+            ./bootstrap --prefix="${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
+            make -j"$(nproc)" install
+
+            ALT_PRIO=$(echo "$version" | sed 's/\.//g')
+            update-alternatives --force \
+            --install /usr/bin/cmake cmake "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cmake "${ALT_PRIO}" \
+            --slave   /usr/bin/ctest ctest "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/ctest \
+            --slave   /usr/bin/cpack cpack "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cpack
+            popd > /dev/null # leave BUILD_FOLDER/cmake-${version}
         fi
-        ./bootstrap --prefix="${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
-        make -j$(nproc) install
-
-        ALT_PRIO=$(echo "$version" | sed 's/\.//g' | awk -F. '{print $1}')
-        update-alternatives --force \
-        --install /usr/bin/cmake cmake "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cmake ${ALT_PRIO} \
-        --slave   /usr/bin/ctest ctest "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/ctest \
-        --slave   /usr/bin/cpack cpack "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cpack
-        
-	popd > /dev/null
     else 
-	echo "cmake ${version} is already registered as an alternative"
+	    echo "cmake ${version} is already registered as an alternative"
     fi
+    echo "" # newline formatting
 done
 
 popd > /dev/null # leave TMP_BUILD_DIR
 
 # remove temporary build directory
-rm -r "${CMAKE_INSTALL_DIR_ABSOLUTE}"/"${TMP_BUILD_DIR}"
+rm -r "${CMAKE_INSTALL_DIR_ABSOLUTE:?'CMAKE_INSTALL_DIR_ABSOLUTE not defined'}"/"${TMP_BUILD_DIR:?'TMP_BUILD_DIR not defined'}"
 
 popd > /dev/null # leave CMAKE_INSTALL_DIR_ABSOLUTE
