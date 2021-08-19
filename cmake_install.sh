@@ -58,7 +58,7 @@ declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3" "3.20.5")
 # rm /etc/alternatives/cpack
 # rm -r /var/lib/dpkg/alternatives/cmake
 
-CMAKE_INSTALL_DIR_ABSOLUTE="/usr/cmake"
+CMAKE_INSTALL_DIR_ABSOLUTE="/usr/local/cmake"
 
 if [ -d "${CMAKE_INSTALL_DIR_ABSOLUTE}" ]; then
     echo ""
