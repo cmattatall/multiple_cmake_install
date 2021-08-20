@@ -7,7 +7,7 @@
 #                                                                              #
 ################################################################################
 #                                                                              #
-# Note: RUN AS SUDO                                                            #
+# Note: RUN WITH ROOT PERMISSIONS                                              #
 #                                                                              #
 ################################################################################
 #                                                                              #
@@ -45,8 +45,7 @@ for pkg in ${required_packages[@]}; do
 done
 
 # Put the versions you want to install here
-#declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3" "3.20.5")
-declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1")
+declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3" "3.20.5")
 
 # If there are broken link groups,
 # You may have to manually delete the old alternatives.
@@ -305,6 +304,7 @@ function setup_cmake_version (){
         [ -z "${CMAKE_INSTALL_PREFIX}" ] && echo "CMAKE_INSTALL_PREFIX not set. Exiting ... " && exit 1
 
         version=$1
+        echo "Setting up cmake version ${version} ..."
         local CMAKE_CURRENT_VERSION_DIR="cmake-${version}"
         local CMAKE_CURRENT_BUILD_PATH="${CMAKE_BUILD_PREFIX}/${CMAKE_CURRENT_VERSION_DIR}"
         local CMAKE_CURRENT_INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}/${CMAKE_CURRENT_VERSION_DIR}"
@@ -313,16 +313,14 @@ function setup_cmake_version (){
         echo "CMAKE_CURRENT_INSTALL_PREFIX = ${CMAKE_CURRENT_INSTALL_PREFIX}"
 
         # Before we try to download and build a cmake version, check if we already have it     
-        update-alternatives --list cmake > /dev/null
+        update-alternatives --list cmake > /dev/null && \
+        update-alternatives --list cmake | grep "${version}" > /dev/null
         if [ "$?" -ne 0 ]; then
-            update-alternatives --list cmake | grep "${version}" > /dev/null
-            if [ "$?" -ne 0 ]; then
-                download_cmake_version $version
-                build_and_install_cmake_version $version
-                symlink_cmake_version $version
-            else 
-                echo "cmake ${version} is already registered as an alternative"
-            fi
+            download_cmake_version $version
+            build_and_install_cmake_version $version
+            symlink_cmake_version $version
+        else 
+            echo "cmake ${version} is already registered as an alternative"
         fi
     fi
 }
@@ -343,7 +341,6 @@ function setup_multiple_cmake_versions () {
             # is equivalent to
             # $ for i in "$@"; do .... done
             for version; do
-                echo "Setting up cmake version ${version} ..."
                 setup_cmake_version ${version}
             done
         fi
@@ -356,14 +353,10 @@ function main () {
     create_directories
     setup_multiple_cmake_versions "${CMAKE_VERSIONS[@]}"
 
-    echo "Calling exit 0, remove me later once stuff works"
-    exit 0
-
-
     for version in "${CMAKE_VERSIONS[@]}"; do
         echo "Checking cmake ${version} was installed correctly ... "
-        update-alternatives --list | grep ${version}
-
+        update-alternatives --list cmake 2> /dev/null && \
+        update-alternatives --list cmake | grep ${version} 2> /dev/null
         if [ "$?" -eq 0 ]; then
             echo "Ok."
             echo ""
