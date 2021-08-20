@@ -15,11 +15,12 @@
 #                                                                              #
 ################################################################################
 
-declare -a required_packages=("wget" "tar" "make" "gcc" "g++" "libssl-dev")
+declare -a required_packages=("wget" "tar" "make" "gcc" "g++" "libssl-dev" "build-essential")
 UPDATED=0
 for pkg in ${required_packages[@]}; do
     echo -n "Checking for ${pkg} ..."
-    dpkg -s ${pkg} > /dev/null # check if installed
+    echo ""
+    dpkg -s ${pkg} 2> /dev/null # check if installed
     if [ "$?" -ne 0 ]; then
         if [ -z $UPDATED ]; then
             apt-get update
@@ -43,8 +44,6 @@ for pkg in ${required_packages[@]}; do
     fi
 done
 
-set -e
-
 # Put the versions you want to install here
 declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3" "3.20.5")
 
@@ -58,64 +57,272 @@ declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3" "3.20.5")
 # rm /etc/alternatives/cpack
 # rm -r /var/lib/dpkg/alternatives/cmake
 
-CMAKE_INSTALL_DIR_ABSOLUTE="/usr/local/cmake"
+CMAKE_INSTALL_PATH="/usr/local/cmake"
+CMAKE_BIN_LINK_PATH="/usr/local/bin"
+CMAKE_BUILD_PATH="/usr/local/src/cmake"
 
-if [ -d "${CMAKE_INSTALL_DIR_ABSOLUTE}" ]; then
-    echo ""
-else
-	mkdir -p ${CMAKE_INSTALL_DIR_ABSOLUTE} 
-fi
-pushd ${CMAKE_INSTALL_DIR_ABSOLUTE} > /dev/null
+function create_directories () {
+    if [ ! -d "${CMAKE_BUILD_PATH}" ]; then
+    	mkdir -p "${CMAKE_BUILD_PATH}"
+    else
+        echo "CMAKE_BUILD_PATH : ${CMAKE_BUILD_PATH} already exists"
+    fi
+
+    if [ ! -d "${CMAKE_INSTALL_PATH}" ]; then
+    	mkdir -p "${CMAKE_INSTALL_PATH}"
+    else 
+        echo "CMAKE_INSTALL_PATH : ${CMAKE_INSTALL_PATH} already exists"
+    fi
+
+    # We won't touch CMAKE_BIN_LINK_PATH because we'll assume that is 
+    # already exists and it will likely be /usr/bin or /usr/local/bin
+    # and the consequences of a bug in the script can cause big problems
+}
 
 
-TMP_BUILD_DIR="build"
-if [ -d "${TMP_BUILD_DIR}" ]; then
-    rm -r ${TMP_BUILD_DIR} && mkdir "${TMP_BUILD_DIR}"
-else 
-    mkdir "${TMP_BUILD_DIR}"
-fi
-pushd ${TMP_BUILD_DIR} > /dev/null
 
-set +e
-for version in "${CMAKE_VERSIONS[@]}"; do
-    echo "Attempting to install cmake version : ${version}..."
-    update-alternatives --list cmake > /dev/null && update-alternatives --list cmake | grep -q "${version}" > /dev/null
-    if [ "$?" -ne 0 ]; then
-    	echo "Attempting to download cmake version : ${version}..."
-	    CMAKE_TARBALL_URL="https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}.tar.gz"
+function download_cmake_version () {
+    if [ "$#" -ne 1 ]; then
+        echo "Illegal number of parameters. Expected 1 but $# were given." 
+        echo "Only 1 cmake version can be downloaded at a time"
+        echo "Args provided:"
+        for arg; do
+            echo "-n $arg" 
+        done
+        exit -1
+    else
+        version=$1
+        local CMAKE_CURRENT_BUILD_PATH=${CMAKE_BUILD_PATH}/${version}
+        local CMAKE_CURRENT_INSTALL_PREFIX="${CMAKE_INSTALL_PATH}/${version}"
+        echo "Downloading source for cmake ${version} ..."
+        local CMAKE_TARBALL_URL="https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}.tar.gz"
         wget "${CMAKE_TARBALL_URL}"
         if [ "$?" -ne 0  ]; then
             echo "Could not download ${CMAKE_TARBALL_URL}"
-        else	
+            exit -1
+        else
             echo "Downloaded ${CMAKE_TARBALL_URL} sucessfully!"
-            tar -xvf cmake-"${version}".tar.gz
+            tar -xvf "cmake-${version}".tar.gz
             rm cmake-"${version}".tar.gz
+            mv "cmake-${version}" ${version}
+        fi
+    fi
+}
 
-            # cmake-${version} will already exist from untarring the archive
-            pushd cmake-"${version}" > /dev/null
-            CURRENT_CMAKE_VERSION_INSTALL_DIR="${CMAKE_INSTALL_DIR_ABSOLUTE}/cmake-${version}"
-            if [ -d "${CURRENT_CMAKE_VERSION_INSTALL_DIR}" ]; then
-                echo ""
+
+function build_and_install_cmake_version () {
+    if [ "$#" -ne 1 ]; then
+        echo "Illegal number of parameters. Expected 1 but $# were given." 
+        echo "Only 1 cmake version can be downloaded at a time"
+        echo "Args provided:"
+        for arg; do
+            echo "-n $arg" 
+        done
+        exit -1
+    else
+        version=$1
+        local CMAKE_CURRENT_BUILD_PATH=${CMAKE_BUILD_PATH}/${version}
+        local CMAKE_CURRENT_INSTALL_PREFIX="${CMAKE_INSTALL_PATH}/${version}"
+        if [ ! -d "${CMAKE_CURRENT_INSTALL_PREFIX}" ]; then
+            echo "Install prefix ${CMAKE_CURRENT_INSTALL_PREFIX} for cmake ${version} does not exist. Creating..."
+            set -e
+            mkdir -p "${CMAKE_CURRENT_INSTALL_PREFIX}"
+            set +e
+        fi
+
+        echo "Checking for current cmake build path : ${CMAKE_CURRENT_BUILD_PATH}"
+        if [ -d "${CMAKE_CURRENT_BUILD_PATH}" ]; then
+            echo "Ok."
+            cd "${CMAKE_CURRENT_BUILD_PATH}"
+            if [ -d "${CMAKE_CURRENT_INSTALL_PREFIX}" ]; then
+                echo "Starting build of cmake ${version} ..."
+                ./bootstrap --prefix="${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
+                if [ "$?" -eq 0 ]; then
+                    echo "Built cmake ${version} successfully! Now installing..."
+                    make -j"$(nproc)" install
+                else
+                    echo "Failed to build cmake ${version}. Now exiting..."
+                    cd -
+                    exit 3
+                fi
             else 
                 mkdir -p "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
+                echo "Install prefix ${CMAKE_CURRENT_INSTALL_PREFIX} for cmake ${version} does not exist. Exiting"
+                cd -
+                exit 2
             fi
-            ./bootstrap --prefix="${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
-            make -j"$(nproc)" install
-
-            ALT_PRIO=$(echo "$version" | sed 's/\.//g')
-            CMAKE_BINARY_SYMLINK_DIR="/usr/local/bin"
-            update-alternatives --force \
-            --install ${CMAKE_BINARY_SYMLINK_DIR}/cmake cmake "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cmake "${ALT_PRIO}" \
-            --slave   ${CMAKE_BINARY_SYMLINK_DIR}/ctest ctest "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/ctest \
-            --slave   ${CMAKE_BINARY_SYMLINK_DIR}/cpack cpack "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cpack
-            popd > /dev/null # leave BUILD_FOLDER/cmake-${version}
+        else
+            echo "Build directory directory ${CMAKE_CURRENT_BUILD_PATH} for cmake ${version} does not exist. Exiting"
+            exit 1
         fi
-    else 
-	    echo "cmake ${version} is already registered as an alternative"
     fi
-    echo "" # newline formatting
-done
+}
 
-popd > /dev/null # leave TMP_BUILD_DIR
 
-popd > /dev/null # leave CMAKE_INSTALL_DIR_ABSOLUTE
+function symlink_cmake_version () {
+    if [ "$#" -ne 1 ]; then
+        echo "Illegal number of parameters. Expected 1 but $# were given." 
+        echo "Only 1 cmake version can be downloaded at a time"
+        echo "Args provided:"
+        for arg; do
+            echo "-n $arg" 
+        done
+        exit -1
+    else
+        version=$1
+        local CMAKE_CURRENT_BUILD_PATH=${CMAKE_BUILD_PATH}/${version}
+        local CMAKE_CURRENT_INSTALL_PREFIX="${CMAKE_INSTALL_PATH}/${version}"
+
+        local CURRENT_CMAKE_EXE_PATH="${CMAKE_CURRENT_INSTALL_PREFIX}/bin/cmake"
+        local CURRENT_CPACK_EXE_PATH="${CMAKE_CURRENT_INSTALL_PREFIX}/bin/cpack"
+        local CURRENT_CTEST_EXE_PATH="${CMAKE_CURRENT_INSTALL_PREFIX}/bin/ctest"
+        if [[ ! -x "$CURRENT_CMAKE_EXE_PATH" ]]; then 
+            echo "File ${CURRENT_CMAKE_EXE_PATH} does not exist or does not have executable permissions"
+            exit 1
+        fi
+
+        if [[ ! -x "$CURRENT_CPACK_EXE_PATH" ]]; then 
+            echo "File ${CURRENT_CPACK_EXE_PATH} does not exist or does not have executable permissions"
+            exit 1
+        fi
+
+        if [[ ! -x "$CURRENT_CTEST_EXE_PATH" ]]; then 
+            echo "File ${CURRENT_CTEST_EXE_PATH} does not exist or does not have executable permissions"
+            exit 1
+        fi
+
+        local ALT_PRIO=$(echo "$version" | sed 's/\.//g')
+        update-alternatives --force \
+        --install ${CMAKE_BIN_LINK_PATH}/cmake cmake "${CURRENT_CMAKE_EXE_PATH}" "${ALT_PRIO}" \
+        --slave   ${CMAKE_BIN_LINK_PATH}/ctest ctest "${CURRENT_CPACK_EXE_PATH}" \
+        --slave   ${CMAKE_BIN_LINK_PATH}/cpack cpack "${CURRENT_CTEST_EXE_PATH}"
+
+        if [ "$?" -ne 0 ]; then
+            echo "Error configuring update-alternatives for cmake ${version}"
+            exit 1
+        fi
+    fi
+}
+
+
+function setup_cmake_version (){
+    if [ "$#" -ne 1 ]; then
+        echo "Illegal number of parameters. Expected 1 but $# were given." 
+        echo "Only 1 cmake version can be downloaded at a time"
+        echo "Args provided:"
+        for arg; do
+            echo "-n $arg" 
+        done
+        exit -1
+    else
+        version=$1
+        local CMAKE_CURRENT_BUILD_PATH=${CMAKE_BUILD_PATH}/${version}
+        local CMAKE_CURRENT_INSTALL_PREFIX="${CMAKE_INSTALL_PATH}/${version}"
+
+        echo "CMAKE_CURRENT_BUILD_PATH = ${CMAKE_CURRENT_BUILD_PATH}"
+        echo "CMAKE_CURRENT_INSTALL_PREFIX = ${CMAKE_CURRENT_INSTALL_PREFIX}"
+
+        # Before we try to download and build a cmake version, check if we already have it     
+        update-alternatives --list cmake > /dev/null
+        if [ "$?" -ne 0 ]; then
+            update-alternatives --list cmake | grep -q "${version}" > /dev/null
+            if [ "$?" -ne 0 ]; then
+                download_cmake_version $version
+                build_and_install_cmake_version $version
+                symlink_cmake_version $version
+            else 
+                echo "cmake ${version} is already registered as an alternative"
+            fi
+        fi
+    fi
+}
+
+
+function setup_multiple_cmake_versions () {
+    cd "${CMAKE_BUILD_PATH}"
+    if [ "$?" -ne 0 ]; then
+        exit -1
+    else 
+        if [ "$#" -eq 0 ]; then
+            echo "Illegal number of parameters. At least 1 argument must be given."
+            cd -
+            exit -1
+        else
+            # Note that:
+            # $ for i; do ... done
+            # is equivalent to
+            # $ for i in "$@"; do .... done
+            for version; do
+                echo "Setting up cmake version ${version} ..."
+                setup_cmake_version ${version}
+
+                # cd "${CMAKE_CURRENT_VERSION_DIR}"
+                # local CURRENT_CMAKE_VERSION_INSTALL_PATH="${CMAKE_INSTALL_PATH}/${CMAKE_CURRENT_VERSION_DIR}"
+                # if [ -d "${CURRENT_CMAKE_VERSION_INSTALL_DIR}" ]; then
+                #     echo ""
+                # else 
+                #     mkdir -p "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
+                # fi
+                # ./bootstrap --prefix="${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
+                # make -j"$(nproc)" install
+                # cd ../
+            done
+
+
+        fi
+    fi
+}
+
+
+
+
+
+function foo () {
+
+    for version in "${CMAKE_VERSIONS[@]}"; do
+        echo "Attempting to install cmake version : ${version}..."
+        update-alternatives --list cmake > /dev/null && update-alternatives --list cmake | grep -q "${version}" > /dev/null
+        if [ "$?" -ne 0 ]; then
+            echo "Attempting to download cmake version : ${version}..."
+            CMAKE_TARBALL_URL="https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}.tar.gz"
+            wget "${CMAKE_TARBALL_URL}"
+            if [ "$?" -ne 0  ]; then
+                echo "Could not download ${CMAKE_TARBALL_URL}"
+            else	
+                echo "Downloaded ${CMAKE_TARBALL_URL} sucessfully!"
+                tar -xvf cmake-"${version}".tar.gz
+                rm cmake-"${version}".tar.gz
+
+                # cmake-${version} will already exist from untarring the archive
+                cd cmake-"${version}"
+                CURRENT_CMAKE_VERSION_INSTALL_DIR="${CMAKE_INSTALL_PATH}/cmake-${version}"
+                if [ -d "${CURRENT_CMAKE_VERSION_INSTALL_DIR}" ]; then
+                    echo ""
+                else 
+                    mkdir -p "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
+                fi
+                ./bootstrap --prefix="${CURRENT_CMAKE_VERSION_INSTALL_DIR}"
+                make -j"$(nproc)" install
+
+                ALT_PRIO=$(echo "$version" | sed 's/\.//g')
+                update-alternatives --force \
+                --install ${CMAKE_BIN_LINK_PATH}/cmake cmake "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cmake "${ALT_PRIO}" \
+                --slave   ${CMAKE_BIN_LINK_PATH}/ctest ctest "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/ctest \
+                --slave   ${CMAKE_BIN_LINK_PATH}/cpack cpack "${CURRENT_CMAKE_VERSION_INSTALL_DIR}"/bin/cpack
+                cd -
+            fi
+        else 
+            echo "cmake ${version} is already registered as an alternative"
+        fi
+        echo "" # newline formatting
+    done
+}
+
+
+function main () {
+    create_directories
+    setup_multiple_cmake_versions "${CMAKE_VERSIONS[@]}"
+}
+
+
+main
