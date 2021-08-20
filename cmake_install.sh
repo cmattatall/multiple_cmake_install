@@ -15,6 +15,33 @@
 #                                                                              #
 ################################################################################
 
+# Put the versions you want to install here
+declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3" "3.20.5")
+
+# Change these as needed. You don't even have to make the directories yourself
+CMAKE_INSTALL_PREFIX="/usr/local/cmake"
+CMAKE_BUILD_PREFIX="/usr/local/src/cmake"
+CMAKE_BIN_LINK_PATH="/usr/local/bin"
+
+################################################################################
+# Note:
+################################################################################
+# If there are broken update-alternatives link groups,
+# You may have to manually delete the old alternatives.
+# See below:
+#
+# rm /etc/alternatives/cmake
+# rm /etc/alternatives/ctest
+# rm /etc/alternatives/cpack
+# rm -r /var/lib/dpkg/alternatives/cmake
+################################################################################
+
+################################################################################
+################################################################################
+# SCRIPT AUTOMATION BEGINS BELOW
+################################################################################
+################################################################################
+
 declare -a required_packages=("wget" "tar" "make" "gcc" "g++" "libssl-dev" "build-essential")
 UPDATED=0
 for pkg in ${required_packages[@]}; do
@@ -44,21 +71,6 @@ for pkg in ${required_packages[@]}; do
     fi
 done
 
-# Put the versions you want to install here
-declare -a CMAKE_VERSIONS=("3.16.5" "3.21.1" "3.10.3" "3.20.5")
-
-# If there are broken link groups,
-# You may have to manually delete the old alternatives.
-# See below:
-#
-# rm /etc/alternatives/cmake
-# rm /etc/alternatives/ctest
-# rm /etc/alternatives/cpack
-# rm -r /var/lib/dpkg/alternatives/cmake
-
-CMAKE_INSTALL_PREFIX="/usr/local/cmake"
-CMAKE_BUILD_PREFIX="/usr/local/src/cmake"
-CMAKE_BIN_LINK_PATH="/usr/local/bin"
 
 function create_directories () {
     if [ ! -d "${CMAKE_BUILD_PREFIX}" ]; then
@@ -361,7 +373,10 @@ function main () {
             echo "Ok."
             echo ""
         else 
-            echo "An error occurred when installing cmake ${version}. Try installing manually or fixing this script."
+            echo "" # CLI output formatting
+            echo -n "An error occurred when installing cmake ${version}." 
+            echo -n "Try installing manually"
+            echo "" # CLI output formatting
             exit 1
         fi
     done
